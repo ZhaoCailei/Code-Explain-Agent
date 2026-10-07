@@ -6,7 +6,7 @@ public class Main {
         Config.load();
 
         if (Config.get("api.key", "").isBlank()) {
-            System.out.println("未配置 api.key");
+            System.out.println(" 未配置 api.key");
             return;
         }
 
@@ -17,12 +17,14 @@ public class Main {
         Agent agent = new Agent(llm, registry);
 
         try {
-            // 测试1：直接回答
-            agent.run("用一句话解释什么是 Java 的 Stream？");
-            // 测试2：触发工具调用（模型按 Prompt 返回 JSON）
-            agent.run("帮我看下 src/main/java/com/agent/Main.java 的代码大意");
+            // 测试1：纯对话
+            agent.run("用一句话解释 Java Stream 的 map 操作");
+
+            // 测试2：触发工具调用（需要你本地有这个文件，或改路径）
+            agent.run("帮我读取并解释 D:/Lei Homework/Code-Explain-Agent/src/main/java/com/agent/Main.java");
+
         } catch (Exception e) {
-            System.err.println("Agent 异常: " + e.getMessage());
+            System.err.println("异常: " + e.getMessage());
             e.printStackTrace();
         }
     }

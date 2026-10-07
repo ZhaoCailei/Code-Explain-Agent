@@ -1,23 +1,11 @@
 package com.agent;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import okhttp3.*;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
-
-/**
- * LLM 客户端：OpenAI 兼容协议
- * 特性：超时控制 + Jackson 序列化 + 指数退避重试 + 工具描述注入
- */
 public class LLMClient {
 
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
@@ -47,77 +35,40 @@ public class LLMClient {
                 .build();
 
         this.objectMapper = new ObjectMapper();
-
-        System.out.println("[LLMClient] 初始化完成 → 模型: " + modelName);
     }
 
-    // ========== 方法1：单轮对话（最简） ==========
-
-    public String chat(String userMessage) throws Exception {
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException("API Key 未配置！请在 config.properties 中设置 api.key");
-        }
-
-        // 构建请求体
-        ObjectNode requestBody = objectMapper.createObjectNode();
-        requestBody.put("model", modelName);
-
-        ArrayNode messages = objectMapper.createArrayNode();
-        ObjectNode userMsg = objectMapper.createObjectNode();
-        userMsg.put("role", "user");
-        userMsg.put("content", userMessage);
-        messages.add(userMsg);
-        requestBody.set("messages", messages);
-        requestBody.put("temperature", 0.3);
-        requestBody.put("max_tokens", 2048);
-
-        String jsonBody = objectMapper.writeValueAsString(requestBody);
-        return doRequest(jsonBody);
-    }
-
-    // ========== 方法2：带工具描述的对话 ==========
-
-    public String chat(String userMessage, List<Tool> tools) throws Exception {
+    /**
+     * 标准多轮对话（支持 tools）
+     */
+    public ChatResponse chat(List<Message> messages, ToolRegistry registry) throws Exception {
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalStateException("API Key 未配置！");
         }
 
-        // 构建请求体
-        ObjectNode requestBody = objectMapper.createObjectNode();
-        requestBody.put("model", modelName);
+        ChatRequest req = new ChatRequest();
+        req.setModel(modelName);
+        req.setMessages(messages);
+        req.setTemperature(0.3);
+        req.setMax_tokens(2048);
 
-        // messages
-        ArrayNode messages = objectMapper.createArrayNode();
-        ObjectNode systemMsg = objectMapper.createObjectNode();
-        systemMsg.put("role", "system");
-        systemMsg.put("content", "你是一个代码解释助手。如需读代码请调用 read_file 工具。");
-        messages.add(systemMsg);
-        ObjectNode userMsg = objectMapper.createObjectNode();
-        userMsg.put("role", "user");
-        userMsg.put("content", userMessage);
-        messages.add(userMsg);
-        requestBody.set("messages", messages);
-
-        // tools 字段（OpenAI 兼容格式）
-        ArrayNode toolsArray = objectMapper.createArrayNode();
-        for (Tool t : tools) {
-            ObjectNode toolNode = objectMapper.createObjectNode();
-            toolNode.put("type", "function");
-            ObjectNode func = toolNode.putObject("function");
-            func.put("name", t.name());
-            func.put("description", t.description());
-            func.putObject("parameters").put("type", "object");
-            toolsArray.add(toolNode);
+        if (registry != null && registry.list().size() > 0) {
+            req.setTools(registry.toJsonSchema());
         }
-        requestBody.set("tools", toolsArray);
-        requestBody.put("temperature", 0.3);
-        requestBody.put("max_tokens", 2048);
 
-        String jsonBody = objectMapper.writeValueAsString(requestBody);
-        return doRequest(jsonBody);
+        String jsonBody = objectMapper.writeValueAsString(req);
+        String responseBody = doRequest(jsonBody);
+        return objectMapper.readValue(responseBody, ChatResponse.class);
     }
 
-    // ========== 私有方法：执行 HTTP 请求 + 重试 ==========
+    /**
+     * 简易单轮（无工具）
+     */
+    public String chat(String prompt) throws Exception {
+        List<Message> msgs = new java.util.ArrayList<>();
+        msgs.add(new Message("user", prompt));
+        ChatResponse resp = chat(msgs, null);
+        return resp.getFirstContent();
+    }
 
     private String doRequest(String jsonBody) throws Exception {
         Exception lastException = null;
@@ -133,47 +84,24 @@ public class LLMClient {
 
                 try (Response response = httpClient.newCall(request).execute()) {
                     if (!response.isSuccessful()) {
-                        String errorBody = response.body() != null ? response.body().string() : "unknown";
-                        throw new RuntimeException("HTTP " + response.code() + ": " + errorBody);
+                        String err = response.body() != null ? response.body().string() : "unknown";
+                        throw new RuntimeException("HTTP " + response.code() + ": " + err);
                     }
-
-                    String responseBody = response.body().string();
-                    JsonNode root = objectMapper.readTree(responseBody);
-                    JsonNode choices = root.path("choices");
-
-                    if (choices.isArray() && choices.size() > 0) {
-                        JsonNode message = choices.get(0).path("message");
-                        // 优先检查是否有 tool_calls（标准 Function Call 返回）
-                        JsonNode toolCalls = message.path("tool_calls");
-                        if (toolCalls.isArray() && toolCalls.size() > 0) {
-                            // 返回 tool_call 的 JSON 字符串，让 Agent 解析
-                            return objectMapper.writeValueAsString(toolCalls);
-                        }
-                        // 否则返回普通文本
-                        return message.path("content").asText();
-                    } else {
-                        throw new RuntimeException("响应格式异常: " + responseBody);
-                    }
+                    return response.body().string();
                 }
-
             } catch (Exception e) {
                 lastException = e;
                 if (attempt < maxRetry - 1) {
                     long delay = baseDelayMs * (1L << attempt);
-                    System.err.println("[LLMClient] 第 " + (attempt + 1) + " 次调用失败，"
-                            + delay + "ms 后重试。原因: " + e.getMessage());
+                    System.err.println("[LLMClient] 第 " + (attempt + 1) + " 次失败，" + delay + "ms 后重试: " + e.getMessage());
                     Thread.sleep(delay);
                 }
             }
         }
-
         throw new RuntimeException("LLM 调用失败（已重试 " + maxRetry + " 次）", lastException);
     }
 
-    // ========== 测试连通性 ==========
-
     public String testConnection() throws Exception {
-        System.out.println("[LLMClient] 测试连通性...");
-        return chat("你好，请用一句话回复确认你已就绪。");
+        return chat("你好，用一句话确认就绪。");
     }
 }

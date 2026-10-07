@@ -1,7 +1,8 @@
 package com.agent;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class ReadFileTool implements Tool {
     @Override
@@ -15,15 +16,30 @@ public class ReadFileTool implements Tool {
     @Override
     public String execute(String argsJson) {
         try {
-            ObjectMapper mapper = new ObjectMapper();
-            ObjectNode node = (ObjectNode) mapper.readTree(argsJson);
-            String path = node.has("path") ? node.get("path").asText() : "未知路径";
+            com.fasterxml.jackson.databind.ObjectMapper mapper =
+                    new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode node = mapper.readTree(argsJson);
+            String path = node.has("path") ? node.get("path").asText() : "";
 
-            // 模拟：真实场景用 Files.readString(Path.of(path))
-            if (path.contains("Main.java")) {
-                return "public class Main { public static void main(String[] a) { System.out.println(\"hello\"); } }";
+            if (path.isBlank()) {
+                return "错误：未提供文件路径";
             }
-            return "[模拟文件内容] 路径=" + path + "，共 3 行代码。";
+
+            Path p = Paths.get(path);
+            if (!Files.exists(p)) {
+                return "错误：文件不存在 → " + path;
+            }
+            if (Files.isDirectory(p)) {
+                return "错误：路径是目录而非文件 → " + path;
+            }
+
+            String content = Files.readString(p);
+            // 限制返回长度，防止超 token
+            if (content.length() > 8000) {
+                content = content.substring(0, 8000) + "\n\n... (内容过长，已截断)";
+            }
+            return content;
+
         } catch (Exception e) {
             return "读取失败: " + e.getMessage();
         }
