@@ -13,14 +13,14 @@
         <maven.compiler.source>26</maven.compiler.source>
         <maven.compiler.target>26</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- 锁定依赖版本 -->
         <slf4j.version>2.0.13</slf4j.version>
         <okhttp.version>4.12.0</okhttp.version>
-        <jackson.version>2.17.0</jackson.version>
+        <jackson.version>2.17.2</jackson.version>
+        <logback.version>1.5.18</logback.version>
     </properties>
 
     <dependencies>
-        <!-- 1. 日志门面与实现 (SLF4J + Logback) -->
+        <!-- 日志 -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
@@ -29,27 +29,37 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.5.18</version>
+            <version>${logback.version}</version>
         </dependency>
 
-        <!-- 2. HTTP 客户端 (OkHttp，用于后续调用大模型 API) -->
+        <!-- HTTP 客户端 -->
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp</artifactId>
             <version>${okhttp.version}</version>
         </dependency>
 
-        <!-- 3. JSON 解析 (Jackson，用于解析 API 返回) -->
+        <!-- JSON 解析 -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
             <version>${jackson.version}</version>
         </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <!-- 确保编译器识别 Java 26 -->
+            <!-- 编译器 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -57,6 +67,20 @@
                 <configuration>
                     <source>26</source>
                     <target>26</target>
+                </configuration>
+            </plugin>
+
+            <!-- 打包插件（可选，方便后期打成 jar） -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.agent.Main</mainClass>
+                        </manifest>
+                    </archive>
                 </configuration>
             </plugin>
         </plugins>

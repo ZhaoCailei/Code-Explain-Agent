@@ -36,6 +36,21 @@ public class Config {
     public static String get(String key, String defaultValue) {
         return props.getProperty(key, defaultValue);
     }
+    /**
+     * 读取整数配置，带默认值
+     */
+    public static int getInt(String key, int defaultValue) {
+        load();
+        String val = props.getProperty(key);
+        if (val != null && !val.isBlank()) {
+            try {
+                return Integer.parseInt(val.trim());
+            } catch (NumberFormatException e) {
+                return defaultValue;
+            }
+        }
+        return defaultValue;
+    }
 
     // 读取配置（无默认值）
     public static String get(String key) {
