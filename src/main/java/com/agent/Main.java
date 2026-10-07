@@ -1,29 +1,23 @@
 package com.agent;
 
-import java.util.Scanner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Main {
+    private static final Logger logger = LoggerFactory.getLogger(Main.class);
+
     public static void main(String[] args) {
-        System.out.println("=== Code Explain Agent 启动成功 (空壳测试) ===");
-        System.out.println("输入 'exit' 退出程序。");
-        System.out.println("当前工作目录: " + System.getProperty("user.dir"));
-        System.out.println();
+        logger.info("【阶段二】Agent 启动中...");
 
-        Scanner scanner = new Scanner(System.in);
-        while (true) {
-            System.out.print("你 > ");
-            if (!scanner.hasNextLine()) break;
-            String input = scanner.nextLine().trim();
+        // 验证配置读取
+        String model = Config.get("model", "test-model-stage2");
+        logger.info("当前加载的模型配置: {}", model);
 
-            if ("exit".equalsIgnoreCase(input)) {
-                System.out.println("程序已退出。");
-                break;
-            }
-            if (input.isEmpty()) continue;
-
-            System.out.println("Agent(占位) > 收到指令：" + input + " （等待接入真实逻辑）");
-            System.out.println();
+        String apiKey = Config.get("api.key");
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            logger.warn("API Key 未配置（符合预期占位状态）");
         }
-        scanner.close();
+
+        logger.info("【阶段二】骨架与日志/配置层验证通过");
     }
 }
